@@ -2,7 +2,6 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-import pandas as pd
 from numpy import diff, sqrt, arange, array, ndarray, inf, atleast_2d, zeros, sum, median, where
 from pytransit import sdss_g, sdss_r, sdss_i, sdss_z, RoadRunnerModel
 from pytransit.contamination import Instrument, SMContamination
@@ -12,9 +11,12 @@ from pytransit.orbits import as_from_rhop, i_from_ba
 from uncertainties import ufloat
 
 sys.path.append('..')
-from src.core import read_tess, read_m2, read_hipercam
+from src.io import read_tess_data, read_m2_data, read_hipercam_data, read_lco_data
 
 import astropy.units as u
+
+AACW = 3.46
+AAPW = 7.1
 
 mj2kg = u.M_jup.to(u.kg)
 ms2kg = u.M_sun.to(u.kg)
@@ -37,119 +39,6 @@ period = ufloat(2.326214, 0.000223)
 # Photometry files
 # ----------------
 root = Path(__file__).parent.resolve()
-m2_files = sorted((root / 'data' / 'muscat2').glob('*fits'))
-tess_files = sorted((root / 'data' / 'tess').glob('*.fits'))
-
-def read_external_data():
-    times, fluxes, covs = [], [], []
-
-    df = pd.read_csv('data/external/TIC8348911-01_02032021_TRAPPIST-North_z_measurements.xls', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1_n.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_20210305_LCO-McD-1m0_ip_measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_20210326_LCO-CTIO-1m0_ip_10px_measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_20210328_LCO-SSO-1m0_ip_measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB_MOBS.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_20210401_TRAPPIST-South_I+z_Measurements.txt', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_20210416_LCO-CTIO-1m0_ip_measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_23022021_TRAPPIST-North_z_measurements.xls', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC_8348911.01_26012021_TRAPPIST-North_I+z_measurements.txt', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.Rel_flux_T1.values.copy()
-    c = df['Airmass FWHM dX dY'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    
-    df = pd.read_csv('data/external/TIC8348911-01_20210523_LCO-SSO-2m0_gp_Measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_20210523_LCO-SSO-2m0_rp_Measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_20210523_LCO-SSO-2m0_ip_Measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_20210523_LCO-SSO-2m0_zs_Measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-    
-    
-    df = pd.read_csv('data/external/TIC8348911-01_20210523_LCO-HAL-M3_gp_10px_measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_20210523_LCO-HAL-M3_rp_15px_measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_20210523_LCO-HAL-M3_ip_15px_measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-
-    df = pd.read_csv('data/external/TIC8348911-01_20210523_LCO-HAL-M3_zs_15px_measurements.tbl', delim_whitespace=True)
-    t = df.BJD_TDB.values.copy()
-    f = df.rel_flux_T1.values.copy()
-    c = df['AIRMASS FWHM_Mean X(IJ)_T1 Y(IJ)_T1'.split()].values.copy()
-    times.append(t); fluxes.append(f), covs.append(c)
-    
-    fluxes = [f / median(f) for f in fluxes]
-    wns = [diff(f).std() / sqrt(2) for f in fluxes]
-    pbs = 'z_s i i i i i z_s i g r i z_s g r i z_s'.split()
-    #pbs = 'z_s i i i iz i z_s iz'.split()
-
-    ins = 'TRAPPIST LCO LCO LCO TRAPPIST LCO TRAPPIST TRAPPIST M3 M3 M3 M3 M3 M3 M3 M3'.split()
-    piis = list(arange(len(times)))
-    return times, fluxes, pbs, wns, covs, ins, piis
-
 
 # Define the log posterior functions
 # ----------------------------------
@@ -170,24 +59,20 @@ class LPF(BaseTGCLPF):
         super().__init__(name, use_ldtk, tm=tm)
 
     def read_data(self):
-        times_t, fluxes_t, pbs_t, wns_t, ins_t, piis_t = read_tess(tess_files, zero_epoch, period,
+        times_t, fluxes_t, pbs_t, wns_t, ins_t, piis_t = read_tess_data(zero_epoch, period,
                                                                    baseline_duration_d=0.3,
                                                                    use_pdc=self.use_pdc)
-        times_m2, fluxes_m2, pbs_m2, wns_m2, covs_m2, ins_m2, piis_m2 = read_m2(m2_files,
-                                                                                downsample=self.downsample,
-                                                                                passbands=self.m2_passbands)
-        times_l, fluxes_l, pbs_l, wns_l, covs_l, ins_l, piis_l = read_external_data()
-        times_h, fluxes_h, pbs_h, wns_h, covs_h, ins_h, piis_h = read_hipercam(['data/hipercam/toi-266.01-hipercam-210805.fits'])
+        times_m2, fluxes_m2, pbs_m2, wns_m2, covs_m2, ins_m2, piis_m2 = read_m2_data(downsample=self.downsample,
+                                                                                     passbands=self.m2_passbands)
+        times_l, fluxes_l, pbs_l, wns_l, covs_l, ins_l, piis_l = read_lco_data()
+        times_h, fluxes_h, pbs_h, wns_h, covs_h, ins_h, piis_h = read_hipercam_data()
 
         times = times_t + times_m2 + times_l + times_h
         fluxes = fluxes_t + fluxes_m2 + fluxes_l + fluxes_h
+
         pbs = pbs_t + pbs_m2 + pbs_l + pbs_h
         wns = wns_t + wns_m2 + wns_l + wns_h
-        if self.heavy_baseline:
-            covs = len(times_t) * [array([[]])] + covs_m2 + covs_l + covs_h
-        else:
-            covs = (len(times_t) + len(times_m2) + len(times_l))* [array([[]])] + len(times_h)
-
+        covs = len(times_t) * [array([[]])] + covs_m2 + covs_l + covs_h
         pbnames = 'tess g r i z_s'.split()
 
         self._stess = len(times_t)
