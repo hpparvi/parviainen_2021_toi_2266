@@ -34,8 +34,9 @@ star_m    = ufloat(0.23, 0.02)
 
 # Prior orbital parameters
 # ------------------------
-zero_epoch = ufloat(22458957.927167, 0.002598)
+#zero_epoch = ufloat(22458957.927167, 0.002598)
 zero_epoch = ufloat(2459255.6937865, 0.005)
+#zero_epoch = ufloat(2459432.49, 0.005)  # From HyperCAM
 period = ufloat(2.326214, 0.000223)
 
 # Photometry files
@@ -59,7 +60,6 @@ class LPF(BaseTGCLPF):
         self.m2_passbands = m2_passbands
         tm = RoadRunnerModel('power-2-pm', small_planet_limit=0.005, parallel=True)
         super().__init__(name, use_ldtk, tm=tm)
-        self.tm.epids[:] = self.epids
 
     def read_data(self):
         times_t, fluxes_t, pbs_t, wns_t, ins_t, piis_t = read_tess_data(zero_epoch, period,
@@ -72,10 +72,6 @@ class LPF(BaseTGCLPF):
 
         times = times_t + times_m2 + times_l + times_h
         fluxes = fluxes_t + fluxes_m2 + fluxes_l + fluxes_h
-
-        self.epochs = epoch(array([median(a) for a in times]), zero_epoch.n, period.n)
-        self.epids = pd.Categorical(self.epochs).codes
-        self.nepochs = self.epids[-1] + 1
 
         pbs = pbs_t + pbs_m2 + pbs_l + pbs_h
         wns = wns_t + wns_m2 + wns_l + wns_h
@@ -92,21 +88,6 @@ class LPF(BaseTGCLPF):
 
         return times, fluxes, pbnames, pbs, wns, covs
 
-
-    def _init_p_orbit(self):
-        """Orbit parameter initialisation.
-        """
-        porbit = [
-            GParameter('p', 'period', 'd', NP(1.0, 1e-5), (0, inf)),
-            GParameter('rho', 'stellar_density', 'g/cm^3', UP(0.1, 25.0), (0, inf)),
-            GParameter('b', 'impact_parameter', 'R_s', UP(0.0, 1.0), (0, 1))]
-        self.ps.add_global_block('orbit', porbit)
-
-        ptc = [GParameter(f'tc_{i}', f'transit_center_{i}', '-', NP(0.0, 0.1), (-inf, inf)) for i in range(self.nepochs)]
-        self.ps.add_global_block('tc', ptc)
-        self._pid_tc = repeat(self.ps.blocks[-1].start, self.nlc)
-        self._start_tc = self.ps.blocks[-1].start
-        self._sl_tc = self.ps.blocks[-1].slice
 
     def _init_instrument(self):
         """Set up the instrument and contamination model."""
@@ -126,9 +107,7 @@ class LPF(BaseTGCLPF):
         if self.use_opencl:
             self.tm = self.tm.to_opencl()
 
-        for i,e in enumerate(unique(self.epochs)):
-            self.set_prior(f'tc_{i}', 'NP', zero_epoch.n + period.n*e, 0.01)
-
+        self.set_prior('tc', 'NP', zero_epoch.n, 5*zero_epoch.s)
         self.set_prior('p', 'NP', period.n, period.s)
         self.set_prior('rho', 'UP', 20, 35)
         self.set_prior('k2_app', 'UP', 0.02 ** 2, 0.08 ** 2)
@@ -136,6 +115,17 @@ class LPF(BaseTGCLPF):
         self.set_prior('k2_app_tess', 'UP', 0.02 ** 2, 0.08 ** 2)
         self.set_prior('teff_h', 'NP', star_teff.n, star_teff.s)
         self.set_prior('teff_c', 'UP', 2500, 12000)
+
+        self.set_prior('q1_tess', 'NP', 0.78, 0.02)
+        self.set_prior('q2_tess', 'NP', 0.77, 0.02)
+        self.set_prior('q1_g', 'NP', 0.64, 0.02)
+        self.set_prior('q2_g', 'NP', 0.64, 0.02)
+        self.set_prior('q1_r', 'NP', 0.65, 0.02)
+        self.set_prior('q2_r', 'NP', 0.59, 0.02)
+        self.set_prior('q1_i', 'NP', 0.75, 0.02)
+        self.set_prior('q2_i', 'NP', 0.72, 0.02)
+        self.set_prior('q1_z_s', 'NP', 0.79, 0.02)
+        self.set_prior('q2_z_s', 'NP', 0.78, 0.02)
 
     def create_pv_population(self, npv: int = 50) -> ndarray:
         pvp = super().create_pv_population(npv)
@@ -149,10 +139,10 @@ class LPF(BaseTGCLPF):
     def transit_model(self, pvp):
         pvp = atleast_2d(pvp)
         cnt = zeros((pvp.shape[0], self.npb))
-        zero_epoch = pvp[:, self._sl_tc] - self._tref
-        period = pvp[:,0]
-        smaxis = as_from_rhop(pvp[:, 1], period)
-        inclination  = i_from_ba(pvp[:, 2], smaxis)
+        zero_epoch = pvp[:, 0] - self._tref
+        period = pvp[:, 1]
+        smaxis = as_from_rhop(pvp[:, 2], period)
+        inclination  = i_from_ba(pvp[:, 3], smaxis)
         radius_ratio = sqrt(pvp[:, self._i_k2t : self._i_k2t+1])
         ldc = pvp[:, self._sl_ld].reshape([-1, self.npb, 2])
         flux = self.tm.evaluate(radius_ratio, ldc, zero_epoch, period, smaxis, inclination)
