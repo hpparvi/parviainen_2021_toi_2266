@@ -75,7 +75,7 @@ class LPF(BaseTGCLPF):
 
         self.epochs = epoch(array([median(a) for a in times]), zero_epoch.n, period.n)
         self.epids = pd.Categorical(self.epochs).codes
-        self.nepochs = self.epids[-1] + 1
+        self.nepochs = self.epids.max() + 1
 
         pbs = pbs_t + pbs_m2 + pbs_l + pbs_h
         wns = wns_t + wns_m2 + wns_l + wns_h
