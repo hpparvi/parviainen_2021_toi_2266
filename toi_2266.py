@@ -14,34 +14,8 @@ from uncertainties import ufloat
 
 sys.path.append('..')
 from src.io import read_tess_data, read_m2_data, read_hipercam_data, read_lco_data
+from src.core import zero_epoch, period, star_teff
 
-import astropy.units as u
-
-AACW = 3.46
-AAPW = 7.1
-
-mj2kg = u.M_jup.to(u.kg)
-ms2kg = u.M_sun.to(u.kg)
-d2s = u.day.to(u.s)
-
-# Stellar parameters from ALFOSC spectrum
-# ---------------------------------------
-star_teff = ufloat(3200,  160)
-star_logg = ufloat( 5.0,  0.25)
-star_z    = ufloat( 0.08,  0.08)
-star_r    = ufloat(0.260, 0.010)
-star_m    = ufloat(0.23, 0.02)
-
-# Prior orbital parameters
-# ------------------------
-#zero_epoch = ufloat(22458957.927167, 0.002598)
-zero_epoch = ufloat(2459255.6937865, 0.005)
-#zero_epoch = ufloat(2459432.49, 0.005)  # From HyperCAM
-period = ufloat(2.326214, 0.000223)
-
-# Photometry files
-# ----------------
-root = Path(__file__).parent.resolve()
 
 # Define the log posterior functions
 # ----------------------------------
@@ -58,8 +32,9 @@ class LPF(BaseTGCLPF):
         self.heavy_baseline = heavy_baseline
         self.downsample = downsample
         self.m2_passbands = m2_passbands
-        tm = RoadRunnerModel('power-2-pm', small_planet_limit=0.005, parallel=True)
+        tm = RoadRunnerModel('power-2-pm', small_planet_limit=0.005, parallel=False)
         super().__init__(name, use_ldtk, tm=tm)
+        self.result_dir = Path('results')
 
     def read_data(self):
         times_t, fluxes_t, pbs_t, wns_t, ins_t, piis_t = read_tess_data(zero_epoch, period,
@@ -85,9 +60,7 @@ class LPF(BaseTGCLPF):
 
         fluxes = [f / median(f) for f in fluxes]
         covs = [(c-c.mean(0)) / c.std(0) for c in covs]
-
         return times, fluxes, pbnames, pbs, wns, covs
-
 
     def _init_instrument(self):
         """Set up the instrument and contamination model."""
@@ -109,23 +82,23 @@ class LPF(BaseTGCLPF):
 
         self.set_prior('tc', 'NP', zero_epoch.n, 5*zero_epoch.s)
         self.set_prior('p', 'NP', period.n, period.s)
-        self.set_prior('rho', 'UP', 20, 35)
+        self.set_prior('rho', 'UP', 5, 35)
         self.set_prior('k2_app', 'UP', 0.02 ** 2, 0.08 ** 2)
         self.set_prior('k2_true', 'UP', 0.02 ** 2, 0.95 ** 2)
         self.set_prior('k2_app_tess', 'UP', 0.02 ** 2, 0.08 ** 2)
         self.set_prior('teff_h', 'NP', star_teff.n, star_teff.s)
         self.set_prior('teff_c', 'UP', 2500, 12000)
 
-        self.set_prior('q1_tess', 'NP', 0.78, 0.02)
-        self.set_prior('q2_tess', 'NP', 0.77, 0.02)
-        self.set_prior('q1_g', 'NP', 0.64, 0.02)
-        self.set_prior('q2_g', 'NP', 0.64, 0.02)
-        self.set_prior('q1_r', 'NP', 0.65, 0.02)
-        self.set_prior('q2_r', 'NP', 0.59, 0.02)
-        self.set_prior('q1_i', 'NP', 0.75, 0.02)
-        self.set_prior('q2_i', 'NP', 0.72, 0.02)
-        self.set_prior('q1_z_s', 'NP', 0.79, 0.02)
-        self.set_prior('q2_z_s', 'NP', 0.78, 0.02)
+        self.set_prior('q1_tess', 'NP', 0.78, 0.008)
+        self.set_prior('q2_tess', 'NP', 0.69, 0.124)
+        self.set_prior('q1_g', 'NP', 0.64, 0.014)
+        self.set_prior('q2_g', 'NP', 0.61, 0.070)
+        self.set_prior('q1_r', 'NP', 0.65, 0.015)
+        self.set_prior('q2_r', 'NP', 0.56, 0.079)
+        self.set_prior('q1_i', 'NP', 0.74, 0.012)
+        self.set_prior('q2_i', 'NP', 0.68, 0.131)
+        self.set_prior('q1_z_s', 'NP', 0.79, 0.011)
+        self.set_prior('q2_z_s', 'NP', 0.71, 0.155)
 
     def create_pv_population(self, npv: int = 50) -> ndarray:
         pvp = super().create_pv_population(npv)
